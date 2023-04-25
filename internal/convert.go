@@ -19,7 +19,7 @@ import (
 const FrontMatterTemplate = `---
 date: '{{.CTime}}'
 updated_at: '{{.MTime}}'
-title: {{ trim .Title }}
+title: '{{ trim .Title }}'
 {{- if .TagList }}
 tags: [ {{ .TagList }} ]
 {{- end -}}
