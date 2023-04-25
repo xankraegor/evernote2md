@@ -203,8 +203,11 @@ const evernoteDateFormat = "20060102T150405Z"
 func convertEvernoteDate(evernoteDate string) time.Time {
 	converted, err := time.Parse(evernoteDateFormat, evernoteDate)
 	if err != nil {
-		log.Printf("[DEBUG] Could not convert time /%s: %s, using today instead", evernoteDate, err.Error())
-		converted = time.Now()
+		converted, err = time.Parse(time.RFC3339, evernoteDate)
+		if err != nil {
+			log.Printf("[DEBUG] Could not convert time /%s: %s, using today instead", evernoteDate, err.Error())
+			converted = time.Now()
+		}
 	}
 
 	return converted
