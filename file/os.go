@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package file
@@ -7,16 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"time"
 )
 
 // Max path length in bytes, determined empirically.
 // P.S. Don't trust Apple documentation
 const maxNameBytes int = 704
-
-// Semicolon is not allowed in MacOS and spaces is just my personal preference
-var illegalChars = regexp.MustCompile(`[\s:]`)
 
 // ChangeFileTimes matches the file times with the Evernote metadata
 //
