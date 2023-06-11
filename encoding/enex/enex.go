@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 )
 
 type (
@@ -83,44 +84,151 @@ var hashRe = regexp.MustCompile(`\b[0-9a-f]{32}\b`)
 // Decode will return an Export from evernote
 func Decode(data io.Reader) (*Export, error) {
 	var e Export
-	err := newDecoder(data).Decode(&e)
+	err := NewDecoder(data).Decode(&e)
 
 	for i := range e.Notes {
-		var c Content
-		var reader = bytes.NewReader(e.Notes[i].Content)
-
-		if err := newDecoder(reader).Decode(&c); err != nil {
+		if err := decodeContent(&e.Notes[i]); err != nil {
 			// EOF is a known case when the content is empty
 			if !errors.Is(err, io.EOF) {
+				e.Notes = append(e.Notes[:i], e.Notes[+1:]...)
 				return nil, fmt.Errorf("decoding note %s: %w", e.Notes[i].Title, err)
 			}
 		}
-		e.Notes[i].Content = c.Text
 
-		for j := range e.Notes[i].Resources {
-			if res := e.Notes[i].Resources[j]; len(res.Recognition) == 0 {
-				hash := hashRe.FindString(res.Attributes.SourceUrl)
-				if len(hash) > 0 {
-					e.Notes[i].Resources[j].ID = hash
-				}
-				continue
-			}
-			var rec Recognition
-			decoder := newDecoder(bytes.NewReader(e.Notes[i].Resources[j].Recognition))
-			err = decoder.Decode(&rec)
-			if err != nil {
-				return nil, fmt.Errorf("decoding resource %s: %w", e.Notes[i].Resources[j].Attributes.Filename, err)
-			}
-			e.Notes[i].Resources[j].ID = rec.ObjID
-			e.Notes[i].Resources[j].Type = rec.ObjType
+		err = decodeRecognition(&e.Notes[i])
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	return &e, err
 }
 
-func newDecoder(r io.Reader) *xml.Decoder {
+type Decoder struct {
+	xml *xml.Decoder
+}
+
+func NewDecoder(r io.Reader) *Decoder {
 	d := xml.NewDecoder(r)
 	d.Strict = false
-	return d
+
+	return &Decoder{xml: d}
+}
+
+func (d Decoder) Decode(v any) error {
+	return d.xml.Decode(v)
+}
+
+type StreamDecoder struct {
+	xml *xml.Decoder
+}
+
+func NewStreamDecoder(r io.Reader) (*StreamDecoder, error) {
+	buf := bytes.Buffer{}
+	if _, err := buf.ReadFrom(r); err != nil {
+		return nil, err
+	}
+	clean := removeNestedCDATA(buf.String())
+
+	d := xml.NewDecoder(strings.NewReader(clean))
+	d.Strict = false
+
+	for {
+		token, err := d.Token()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, fmt.Errorf("failed to initialise stream reader: no en-export data found: %w", err)
+			}
+			return nil, err
+		}
+
+		element, ok := token.(xml.StartElement)
+		if ok && element.Name.Local == "en-export" {
+			break
+		}
+	}
+
+	return &StreamDecoder{xml: d}, nil
+}
+
+func (d StreamDecoder) Next(n *Note) error {
+	for {
+		token, err := d.xml.Token()
+		if err != nil {
+			return err
+		}
+		element, ok := token.(xml.StartElement)
+
+		if ok && element.Name.Local == "note" {
+			err = d.xml.DecodeElement(n, &element)
+			if err != nil {
+				return err
+			}
+			err = decodeContent(n)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				return err
+			}
+
+			return decodeRecognition(n)
+		}
+	}
+}
+
+func decodeContent(n *Note) error {
+	var c Content
+	var reader = bytes.NewReader(n.Content)
+
+	if err := NewDecoder(reader).Decode(&c); err != nil {
+		return err
+	}
+	n.Content = c.Text
+	return nil
+}
+
+func decodeRecognition(n *Note) error {
+	for j := range n.Resources {
+		if res := n.Resources[j]; len(res.Recognition) == 0 {
+			hash := hashRe.FindString(res.Attributes.SourceUrl)
+			if len(hash) > 0 {
+				n.Resources[j].ID = hash
+			}
+			continue
+		}
+		var rec Recognition
+		decoder := NewDecoder(bytes.NewReader(n.Resources[j].Recognition))
+		err := decoder.Decode(&rec)
+		if err != nil {
+			return fmt.Errorf("decoding resource %s: %w", n.Resources[j].Attributes.Filename, err)
+		}
+		n.Resources[j].ID = rec.ObjID
+		n.Resources[j].Type = rec.ObjType
+	}
+
+	return nil
+}
+
+var reCDATA = regexp.MustCompile(`<!\[CDATA\[(.*?)\]\]>`)
+
+// removeNestedCDATA tags in the note content
+//
+// Nested CDATA tags are not allowed by XML specification
+// but Evernote puts them anyway, causing "Unexpected EOF" errors during decoding
+func removeNestedCDATA(input string) string {
+	output := reCDATA.ReplaceAllStringFunc(input, func(match string) string {
+		submatch := reCDATA.FindStringSubmatch(match)
+		if len(submatch) > 1 {
+			return submatch[1]
+		}
+		return match
+	})
+
+	// Recursively remove nested CDATA tags
+	if output != input {
+		return removeNestedCDATA(output)
+	}
+
+	return output
 }
