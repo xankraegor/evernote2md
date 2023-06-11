@@ -68,7 +68,7 @@ func TestBaseName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := file.BaseName(tt.input); got != tt.want {
+			if got := file.BaseName(tt.input, true); got != tt.want {
 				t.Errorf("BaseName for %s\ngot  = %v\nwant = %v", tt.name, got, tt.want)
 			}
 		})

@@ -71,7 +71,7 @@ func (d *noteFilesDir) Path() string {
 
 // uniqueName returns a unique note name
 func (d *noteFilesDir) uniqueName(title string) string {
-	name := file.BaseName(title)
+	name := file.BaseName(title, false)
 	index := strings.ToLower(name)
 
 	if k, exist := d.names[index]; exist {

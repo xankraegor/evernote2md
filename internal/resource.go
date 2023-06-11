@@ -42,11 +42,11 @@ func name(r enex.Resource) (name string, extension string) {
 	ff := reFileAndExt.FindStringSubmatch(name)
 	if len(ff) < 2 {
 		// Guess the extension by the mime type
-		return file.BaseName(name) + basenameIdPart, guessExt(r.Mime)
+		return file.BaseName(name, true) + basenameIdPart, guessExt(r.Mime)
 	}
 
 	// Return sanitized filename
-	return file.BaseName(ff[len(ff)-2]) + basenameIdPart, ff[len(ff)-1]
+	return file.BaseName(ff[len(ff)-2], true) + basenameIdPart, ff[len(ff)-1]
 }
 
 // guessName of the res with the following priority:
