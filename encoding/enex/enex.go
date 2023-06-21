@@ -14,7 +14,7 @@ type (
 	// Export represents Evernote enex file structure
 	Export struct {
 		XMLName xml.Name `xml:"en-export"`
-		Date    string   `xml:"export-date,attr"`
+		Date    string   `xml:"export-date,attr"` // new: 20230720T220928Z; old: 2023-06-20T22:06:35.425Z
 		Notes   []Note   `xml:"note"`
 	}
 
@@ -128,9 +128,11 @@ func NewStreamDecoder(r io.Reader) (*StreamDecoder, error) {
 	if _, err := buf.ReadFrom(r); err != nil {
 		return nil, err
 	}
-	clean := removeNestedCDATA(buf.String())
-
-	d := xml.NewDecoder(strings.NewReader(clean))
+	// fmt.Println(buf.String())
+	// clean := removeNestedCDATA(buf.String())
+	// fmt.Println(clean)
+	d := xml.NewDecoder(strings.NewReader(buf.String()))
+	// d := xml.NewDecoder(strings.NewReader(clean))
 	d.Strict = false
 
 	for {
