@@ -2,10 +2,14 @@ package enex
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 )
@@ -129,10 +133,10 @@ func NewStreamDecoder(r io.Reader) (*StreamDecoder, error) {
 		return nil, err
 	}
 	// fmt.Println(buf.String())
-	// clean := removeNestedCDATA(buf.String())
+	clean := removeNestedCDATA(buf.String())
 	// fmt.Println(clean)
-	d := xml.NewDecoder(strings.NewReader(buf.String()))
-	// d := xml.NewDecoder(strings.NewReader(clean))
+	//d := xml.NewDecoder(strings.NewReader(buf.String()))
+	d := xml.NewDecoder(strings.NewReader(clean))
 	d.Strict = false
 
 	for {
@@ -195,6 +199,15 @@ func decodeRecognition(n *Note) error {
 		if res := n.Resources[j]; len(res.Recognition) == 0 {
 			hash := hashRe.FindString(res.Attributes.SourceUrl)
 			if len(hash) > 0 {
+				n.Resources[j].ID = hash
+			} else {
+				trimmedString := strings.TrimSpace(string(res.Data.Content))
+				resourceData, err := base64.StdEncoding.DecodeString(trimmedString)
+				if err != nil {
+					log.Fatal("Can't decode resource from base64: ", err)
+				}
+				hashData := md5.Sum([]byte(resourceData))
+				hash := hex.EncodeToString(hashData[:])
 				n.Resources[j].ID = hash
 			}
 			continue
